@@ -172,7 +172,20 @@ jobs:
       - name: Run memory-service tests
         working-directory: kaos-memory
         run: |
-          uv venv
-          source .venv/bin/activate
-          uv pip install -e .[service,dev]
-          uv run pytest tests/ -v
+          # Resolve the test environment from uv.lock in a single operation,
+          # with both extras, so every package comes from one consistent
+          # resolution.
+          #
+          # Do not reintroduce `uv pip install -e .[service,dev]` ahead of
+          # `uv run`: the pip install resolves fresh from PyPI (a matched
+          # opentelemetry api/sdk pair), and `uv run` then re-syncs only the
+          # locked *base* dependencies. That downgrades opentelemetry-api to the
+          # locked version while leaving the newer opentelemetry-sdk from the
+          # `service` extra untouched, and the skewed pair makes every traced
+          # request fail with
+          # `AttributeError: 'BoundedAttributes' object has no attribute '_set_items'`.
+          #
+          # `--frozen` rather than `--locked`: the lockfile's recorded project
+          # version trails pyproject.toml between releases (bump-version does not
+          # relock), so `--locked` would fail on a clean checkout.
+          uv run --frozen --extra service --extra dev pytest tests/ -v
